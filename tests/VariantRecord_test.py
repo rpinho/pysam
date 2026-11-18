@@ -172,6 +172,39 @@ def test_format_number_P(vcf_header):
     assert rec.samples["sample2"]["X"] == (37,)
 
 
+@pytest.mark.parametrize("number,short,long", [
+    ("G", (0, 10), (20, 0, 30)),
+    ("P", (10,), (20, 30)),
+    ("LA", (10,), (20, 30)),
+    ("LR", (0, 10), (0, 20, 30)),
+    ("LG", (0, 10), (0, 10, 20, 30, 40, 50)),
+])
+@pytest.mark.parametrize("value_type,scale", [("Integer", 1), ("Integer", 1000), ("Float", 0.5)])
+def test_format_shorter_sample_not_padded(vcf_header, tmp_path, number, short, long, value_type, scale):
+    vcf_header.formats.add("GT", 1, "String", "Genotype")
+    vcf_header.formats.add("LAA", ".", "Integer", "Local alleles")
+    vcf_header.formats.add("X", number, value_type, "Values")
+    short = tuple(v * scale for v in short)
+    long = tuple(v * scale for v in long)
+    alleles = ("A", "C") if number == "G" else ("A", "C", "G")
+    rec = vcf_header.new_record(contig="1", start=10, alleles=alleles)
+    rec.samples[0].update(GT=(1,), LAA=(1,))
+    rec.samples[1].update(GT=(0, 1), LAA=(1, 2))
+    rec.samples[0]["X"] = short
+    rec.samples[1]["X"] = long
+    assert rec.samples[0]["X"] == short
+    assert rec.samples[1]["X"] == long
+
+    for suffix, mode in [("vcf", "w"), ("bcf", "wb")]:
+        path = str(tmp_path / ("shorter." + suffix))
+        with pysam.VariantFile(path, mode, header=vcf_header) as out:
+            out.write(rec)
+        with pysam.VariantFile(path) as inf:
+            actual = next(inf)
+        assert actual.samples[0]["X"] == short
+        assert actual.samples[1]["X"] == long
+
+
 def test_format_number_LA_LR_LG(vcf_header):
     vcf_header.formats.add("GT", 1, "String", "Genotype")
     vcf_header.formats.add("LAA", ".", "Integer", "Local alleles")
@@ -184,8 +217,8 @@ def test_format_number_LA_LR_LG(vcf_header):
     rec = vcf_header.new_record(contig="1", start=10, alleles=["A", "C", "G", "T"], samples=samples)
 
     assert len(rec.samples["sample1"]["LAA"]) == 2
-    #assert rec.samples["sample1"]["LAD"] == (50, 10, 20)
-    #assert rec.samples["sample1"]["LEC"] == (11, 21)
+    assert rec.samples["sample1"]["LAD"] == (50, 10, 20)
+    assert rec.samples["sample1"]["LEC"] == (11, 21)
     assert rec.samples["sample1"]["LPL"] == (1,2,3,4,5,6)
 
     assert len(rec.samples["sample2"]["LAA"]) == 3

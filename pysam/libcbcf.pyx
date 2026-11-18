@@ -945,10 +945,12 @@ cdef bcf_format_set_value(VariantRecordSample sample, key, value):
         raise ValueError('Unsupported FORMAT type')
 
     if fmt and nsamples > 1:
+        # Existing per-sample vectors end at fmt.n, so pad them with
+        # end-of-vector rather than missing values
         for i in range(nsamples):
             bcf_copy_expand_array(fmt.p + i * fmt.size, fmt.type, fmt.n,
                                   new_values_p  + i * dst_size, dst_type, alloc_len,
-                                  vlen)
+                                  1)
 
     bcf_object_to_array(values, new_values_p + sample.index * dst_size, dst_type, alloc_len, vlen)
 
